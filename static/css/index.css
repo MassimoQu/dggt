@@ -1,0 +1,298 @@
+body {
+  font-family: 'Noto Sans', sans-serif;
+}
+
+
+.footer .icon-link {
+    font-size: 25px;
+    color: #000;
+}
+
+.link-block a {
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+.dnerf {
+  font-variant: small-caps;
+}
+
+
+.teaser .hero-body {
+  padding-top: 0;
+  padding-bottom: 3rem;
+}
+
+.teaser {
+  font-family: 'Google Sans', sans-serif;
+}
+
+
+.publication-title {
+}
+
+.publication-banner {
+  max-height: parent;
+
+}
+
+.publication-banner video {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+  object-fit: fit;
+}
+
+.publication-header .hero-body {
+}
+
+.publication-title {
+    font-family: 'Google Sans', sans-serif;
+}
+
+.publication-authors {
+    font-family: 'Google Sans', sans-serif;
+}
+
+.publication-venue {
+    color: #555;
+    width: fit-content;
+    font-weight: bold;
+}
+
+.publication-awards {
+    color: #ff3860;
+    width: fit-content;
+    font-weight: bolder;
+}
+
+.publication-authors {
+}
+
+.publication-authors a {
+   color: hsl(204, 86%, 53%) !important;
+}
+
+.publication-authors a:hover {
+    text-decoration: underline;
+}
+
+.author-block {
+  display: inline-block;
+}
+
+.publication-banner img {
+}
+
+.publication-authors {
+  /*color: #4286f4;*/
+}
+
+.publication-video {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 56.25%;
+
+    overflow: hidden;
+    border-radius: 10px !important;
+}
+
+.publication-video iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.publication-body img {
+}
+
+.results-carousel {
+  overflow: hidden;
+}
+
+.results-carousel .item {
+  margin: 5px;
+  overflow: hidden;
+  border: 1px solid #bbb;
+  border-radius: 10px;
+  padding: 0;
+  font-size: 0;
+}
+
+.results-carousel video {
+  margin: 0;
+}
+
+
+.interpolation-panel {
+  background: #f5f5f5;
+  border-radius: 10px;
+}
+
+.interpolation-panel .interpolation-image {
+  width: 100%;
+  border-radius: 5px;
+}
+
+.interpolation-video-column {
+}
+
+.interpolation-panel .slider {
+  margin: 0 !important;
+}
+
+.interpolation-panel .slider {
+  margin: 0 !important;
+}
+
+#interpolation-image-wrapper {
+  width: 100%;
+}
+#interpolation-image-wrapper img {
+  border-radius: 5px;
+}
+
+/* for recon list */
+li { 
+  cursor: pointer;
+}
+
+/* Style the buttons that are used to open the tab content */
+.nav-item {
+  overflow: hidden;
+  text-align: center;
+  width: 100%;
+  background-color: inherit;
+  float: left;
+  border: 1px solid #ddd;
+  outline: none;
+  cursor: pointer;
+  transition: 0.0s;
+  border-top-right-radius: 10px;
+  border-top-left-radius: 10px;
+}
+
+/* Change background color of buttons on hover */
+.nav-item:hover {
+  background-color: #c7dc94;
+}
+
+/* Create an active/current tablink class */
+.nav-tabs .nav-link.active {
+  background-color: #5c7f17;
+  color:white;
+  font-weight: 500;
+}
+
+.nav a {
+  color: #000;
+  text-decoration: none;
+}
+.nav a:hover {
+  color: #000;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.b-dics__slider {
+  color: #f0f0f0;
+}
+.b-dics__slider:after {
+  width: 2px;
+}
+
+/* Go from zero to full opacity */
+@keyframes fadeEffect {
+  from {opacity: 0;}
+  to {opacity: 1;}
+}
+
+.content-row {
+  padding-left: 10px;
+  padding-right: 10px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  text-align: center;
+}
+
+.demo-scene-panel {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  padding: 10px;
+  color: #111111;
+  border-radius: 7px;
+  border: #bbbbbb 1px solid;
+  background-color: #f1f1f1;
+  width: 220px;
+  margin-left: 8px;
+  margin-right: 8px;
+}
+
+
+.scenes-top-col { position: relative; }
+
+/* 让上排每个 top-video-wrap 宽度与下排分组内部子视频 (45%) 对齐，从而保证视觉上上下两排视频尺寸一致 */
+.scenes-top-col .top-video-wrap { width: 45%; max-width: 220px; position: relative; }
+.top-video-wrap { position: relative; }
+
+/* 箭头容器：居中但扩展宽度以覆盖到下方两个子元素的位置 */
+.arrow-wrap {
+  position: absolute;
+  bottom: -58px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220%;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none; /* 不阻挡视频的 hover/click，单个 .arrow 保持可交互 */
+}
+
+.arrow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto; /* 允许链接可点击 */
+  color: #666;
+  font-size: 14px;
+}
+
+.arrow .chev {
+  font-size: 22px;
+  display: inline-block;
+  color: #666;
+}
+/* 增大倾斜角度，让箭头更明显指向左右下方 */
+.arrow.left .chev {
+  /* 左箭头应指向左下，向下箭头顺时针旋转为左下（正角度） */
+  transform: rotate(40deg);
+}
+.arrow.right .chev {
+  /* 右箭头应指向右下，向下箭头逆时针旋转为右下（负角度） */
+  transform: rotate(-40deg);
+}
+
+/* 左箭头文字放在箭头左侧（row-reverse），右箭头文字放在箭头右侧（默认 row） */
+.arrow.left { flex-direction: row-reverse; }
+.arrow.right { flex-direction: row; }
+.arrow .caption { white-space: nowrap; font-size: 14px; color: #555; }
+
+@media (max-width: 900px) {
+  .arrow-wrap { bottom: -52px; width: 260%; }
+  /* 缩小上排视频以适配较窄屏幕（与下排相对应） */
+  .scenes-top-col .top-video-wrap { width: 30%; }
+}
+@media (max-width: 600px) {
+  .scenes-top-row { flex-direction: column; gap: 20px; }
+  .scenes-top-col { width: 100%; }
+  .arrow-wrap { position: static; transform: none; width: auto; display:flex; justify-content:center; gap:30px; bottom:0; }
+  .arrow .chev { transform:none; }
+}

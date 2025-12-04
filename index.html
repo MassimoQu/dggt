@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+        content="DGGT: Feedforward 4D Reconstruction of Dynamic Driving Scenes Using Unposed Images">
+  <meta name="keywords" content="DGGT: Feedforward 4D Reconstruction of Dynamic Driving Scenes Using Unposed Images">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DGGT: Feedforward 4D Reconstruction of Dynamic Driving Scenes Using Unposed Images</title>
+
+  <!-- Bootstrap -->
+  <link rel="stylesheet" href="./static/css/bootstrap-4.4.1.css">
+
+  <!-- Global site tag (gtag.js) - Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-PYVRSFMDRL"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+
+    function gtag() {
+      dataLayer.push(arguments);
+    }
+
+    gtag('js', new Date());
+
+    gtag('config', 'G-PYVRSFMDRL');
+  </script>
+
+  
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+        rel="stylesheet">
+  <link rel="stylesheet" href="./static/css/bulma.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/index.css">
+  <link rel="icon" href="./static/images/72.png">
+
+  
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+  <script src="./static/js/index.js"></script>
+  <script src="./static/js/app.js"></script>
+  <script src="./static/js/video_comparison.js"></script>
+  <script src="./static/js/video_comparison_3.js"></script>
+
+  <link rel="stylesheet" href="./static/css/dics.original.css">
+  <link rel="stylesheet" href="./static/css/dics2.original.css">
+  <script src="./static/js/event_handler.js"></script>
+  <script src="./static/js/dics.original.js"></script>
+
+</head>
+<body>
+
+
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+          <h1 class="title is-1 publication-title" style="margin-bottom: 0"><strong>DGGT: Feedforward 4D Reconstruction of Dynamic Driving Scenes Using Unposed Images</strong></h1>
+          <!-- Publication links: replace the hrefs below with your real arXiv ID / paper PDF URL -->
+          <div class="publication-links" style="margin-top:8px;">
+            <a class="button is-small is-link" href="https://arxiv.org/abs/2512.03004" target="_blank" rel="noopener">arXiv</a>
+            <a class="button is-small is-dark" href="https://github.com/xiaomi-research/dggt" target="_blank" rel="noopener" style="margin-left:8px;"><span class="icon"><i class="fab fa-github"></i></span>&nbsp;GitHub</a>
+          </div>
+          <!-- <h2 class="title is-2 publication-title" style="margin-top: 0; margin-bottom: 0">Scale-Adaptive Gaussian Splatting for Training-Free Anti-Aliasing</h2> -->
+            
+          <div class="is-size-5 publication-authors">
+            <div class="author-block">
+              <strong>Xiaoxue Chen</strong><sup>¹,²*</sup>, <strong>Ziyi Xiong</strong><sup>¹,²*</sup>, <strong>Yuantao Chen</strong><sup>¹</sup>, <strong>Gen Li</strong><sup>¹</sup>, <strong>Nan Wang</strong><sup>¹</sup>,<br>
+              <strong>Hongcheng Luo</strong><sup>²</sup>, <strong>Long Chen</strong><sup>²</sup>, <strong>Haiyang Sun</strong><sup>²†</sup>, <strong>Bing Wang</strong><sup>²</sup>, <strong>Guang Chen</strong><sup>²</sup>, <strong>Hangjun Ye</strong><sup>²,✉</sup>,<br>
+              <strong>Hongyang Li</strong><sup>³</sup>, <strong>Ya-Qin Zhang</strong><sup>¹</sup>, <strong>Hao Zhao</strong><sup>¹,⁴,✉</sup>
+
+              <div style="margin-top:8px; font-size:0.9em; line-height:1.4;">
+                <div>¹ AIR, Tsinghua University &nbsp;&nbsp; ² Xiaomi EV &nbsp;&nbsp; ³ The University of Hong Kong &nbsp;&nbsp; ⁴ Beijing Academy of Artificial Intelligence</div>
+                <div style="margin-top:4px;">* These authors contributed equally &nbsp;&nbsp; † Project leader</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+</section>
+  
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-two-thirds">
+        <h3 class="title is-4 has-text-centered">DGGT Introduction Video</h3>
+        <video id="demoPlayer" width="100%" playsinline preload="metadata" controls>
+          <source src="resources/dggt.mp4" type="video/mp4">
+        </video>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <!-- Abstract. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3" style="margin-top: -30px">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+            Autonomous driving needs fast, scalable 4D reconstruction and re-simulation for training and evaluation, yet most methods for dynamic driving scenes still rely on per-scene optimization, known camera calibration, or short frame windows, making them slow and impractical. We revisit this problem from a feedforward perspective and note that the existing formulations, treating camera pose as a required input, limits flexibility and scalability. Instead, we reformulate pose as an output of the model, enabling reconstruction directly from sparse, unposed images and supporting an arbitrary number of views for long sequences. Our approach jointly predicts per-frame 3D Gaussian maps and camera parameters, disentangles dynamics with a lightweight dynamic head, and preserves temporal consistency with a lifespan head that modulates visibility over time. A diffusion-based rendering refinement further reduces motion/interpolation artifacts and improves novel-view quality under sparse inputs. The result is a single-pass, pose-free algorithm that achieves state-of-the-art performance and speed. Trained and evaluated on large-scale driving benchmarks (Waymo, nuScenes, Argoverse2), our method outperforms prior work both when trained on each dataset and in zero-shot transfer across datasets, and it scales well as the number of input frames increases.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <!-- Method -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3" style="margin-top: -30px">Method</h2>
+        
+        <!-- Add method figure -->
+        <div class="content has-text-centered">
+          <img src="resources/method.png" alt="Method">
+          <!-- <p class="caption">Overview of our DGGT framework for reconstructing dynamic driving scenes.</p> -->
+        </div>
+        
+        <div class="content has-text-justified">
+          <p>
+            DGGT reconstructs temporally coherent 3D scenes from unposed image sequences in a single feed-forward pass. Our core architecture is a transformer-based network that jointly predicts per-frame camera parameters and a pixel-aligned 3D Gaussian field. Each Gaussian encodes appearance and geometry — color, 3D position, rotation, scale, and opacity — together with a learned lifespan that controls its temporal visibility. To model dynamics, a dedicated motion head fuses 2D image features with the 3D Gaussian points to form a spatio-temporal feature cloud and predicts consistent 3D trajectories for moving objects. The geometry and motion components are trained end-to-end to produce a coherent 4D representation. Finally, a separately trained diffusion-based rendering module refines composed renders to remove artifacts and produce high-fidelity, photorealistic outputs.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+
+    <!-- Results. -->
+    <div class="columns is-centered ">
+      <div class="column is-full-width">
+        <h2 class="title is-3 has-text-centered" style="margin-top: -30px">Results</h2>
+        <h3 class="title is-4 has-text-centered">Comparison on Waymo Open Dataset</h3>
+        <p>We mainly evaluate our approach on the Waymo Open Dataset, focusing on reconstructed-image quality (PSNR, SSIM, LPIPS) and aligned depth accuracy (aligned RMSE / D-RMSE), and compare directly to recent feed-forward and spatio-temporal baselines including STORM, NoPoSplat(NoPo) and DepthSplat(Depth). On the same scenes our method yields consistently higher-fidelity, higher-resolution renderings, more accurate and temporally coherent depth maps, and improved reconstruction of dynamic objects with reduced ghosting and disocclusions.</p>
+
+        <h4 class="title is-5 has-text-centered">Scenes Reconstruction</h4>
+        <p>Scenes Reconstruction — Photorealistic, high-resolution renderings from Waymo frames that preserve fine texture and temporal coherence.</p>
+        <br>
+        <div class="row_three_columns">
+          <div class="content has-text-lefted">
+            <video class="video" id="full_resolution1" loop playsinline autoplay muted src="resources/concatenated_video1_1.mp4" onplay="resizeAndPlay5(this)" ></video>
+            <canvas height=0 class="videoMerge" id="full_resolution1Merge5"></canvas>
+          </div>
+          <div class="content has-text-centered">
+            <video class="video" id="full_resolution2" loop playsinline autoplay muted src="resources/concatenated_video1_2.mp4" onplay="resizeAndPlay5(this)" ></video>
+            <canvas height=0 class="videoMerge" id="full_resolution2Merge5"></canvas>
+          </div>
+          <div class="content has-text-righted">
+            <video class="video" id="full_resolution3" loop playsinline autoplay muted src="resources/concatenated_video1_3.mp4" onplay="resizeAndPlay5(this)" ></video>
+            <canvas height=0 class="videoMerge" id="full_resolution3Merge5"></canvas>
+          </div>
+        </div>
+        <br>
+
+        <h4 class="title is-5 has-text-centered">Depth Estimation​</h4>
+        <p>Depth Estimation: We predict relative depth (scale and offset not fixed) and report errors after linear alignment.</p>
+        <br>
+        <div class="row_three_columns">
+          <div class="content has-text-lefted">
+            <video class="video" id="full_resolution4" loop playsinline autoplay muted src="resources/concatenated_video2_1.mp4" onplay="resizeAndPlay5(this)" ></video>
+            <canvas height=0 class="videoMerge" id="full_resolution4Merge5"></canvas>
+          </div>
+          <div class="content has-text-centered">
+            <video class="video" id="full_resolution5" loop playsinline autoplay muted src="resources/concatenated_video2_2.mp4" onplay="resizeAndPlay5(this)" ></video>
+            <canvas height=0 class="videoMerge" id="full_resolution5Merge5"></canvas>
+          </div>
+          <div class="content has-text-righted">
+            <video class="video" id="full_resolution6" loop playsinline autoplay muted src="resources/concatenated_video2_3.mp4" onplay="resizeAndPlay5(this)" ></video>
+            <canvas height=0 class="videoMerge" id="full_resolution6Merge5"></canvas>
+          </div>
+        </div>
+
+        <br>
+        <h4 class="title is-5 has-text-centered">Dynamic partitioning</h4>
+        <p>Dynamic Partitioning separates moving objects via learned lifespans and per-pixel 3D motion, substantially reducing ghosting and temporal artifacts.</p> 
+        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+          <!-- 左侧三个视频组 -->
+          <div style="display: flex; gap: 1.5%; width: 45%;">
+            <div style="width: 34%;">
+              <video class="video" id="dynamic_part1" loop playsinline autoplay muted src="./resources/video/dyna1_0.mp4" width="100%"></video>
+            </div>
+            <div style="width: 34%; position: relative;">
+              <video class="video" id="dynamic_part2" loop playsinline autoplay muted src="./resources/video/dyna1_1.mp4" width="100%"></video>
+              <!-- 第二个视频下的箭头 -->
+              <div style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%);">
+                <span style="font-size:24px; color:#666;">&#8595;</span>
+              </div>
+            </div>
+            <div style="width: 34%;">
+              <video class="video" id="dynamic_part3" loop playsinline autoplay muted src="./resources/video/dyna1_2.mp4" width="100%"></video>
+            </div>
+          </div>
+
+          <!-- 右侧三个视频组 -->
+          <div style="display: flex; gap: 1.5%; width: 45%;">
+            <div style="width: 34%;">
+              <video class="video" id="dynamic_part4" loop playsinline autoplay muted src="./resources/video/dyna2_0.mp4" width="100%"></video>
+            </div>
+            <div style="width: 34%; position: relative;">
+              <video class="video" id="dynamic_part5" loop playsinline autoplay muted src="./resources/video/dyna2_1.mp4" width="100%"></video>
+              <!-- 第五个视频下的箭头 -->
+              <div style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%);">
+                <span style="font-size:24px; color:#666;">&#8595;</span>
+              </div>
+            </div>
+            <div style="width: 34%;">
+              <video class="video" id="dynamic_part6" loop playsinline autoplay muted src="./resources/video/dyna2_2.mp4" width="100%"></video>
+            </div>
+          </div>
+        </div>
+
+        <!-- 为箭头预留的空间 -->
+        <div style="height: 30px;"></div>
+
+        <!-- 底部6个视频，与上面对齐 -->
+        <div style="display: flex; justify-content: space-between;">
+          <!-- 左侧三个视频组 -->
+          <div style="display: flex; gap: 1.5%; width: 45%;">
+            <div style="width: 34%;">
+              <video class="video" id="dynamic_part1_bottom" loop playsinline autoplay muted src="./resources/video/dyna1_0_.mp4" width="100%"></video>
+            </div>
+            <div style="width: 34%;">
+              <video class="video" id="dynamic_part2_bottom" loop playsinline autoplay muted src="./resources/video/dyna1_1_.mp4" width="100%"></video>
+            </div>
+            <div style="width: 34%;">
+              <video class="video" id="dynamic_part3_bottom" loop playsinline autoplay muted src="./resources/video/dyna1_2_.mp4" width="100%"></video>
+            </div>
+          </div>
+
+          <!-- 右侧三个视频组 -->
+          <div style="display: flex; gap: 1.5%; width: 45%;">
+            <div style="width: 34%;">
+              <video class="video" id="dynamic_part4_bottom" loop playsinline autoplay muted src="./resources/video/dyna2_0_.mp4" width="100%"></video>
+            </div>
+            <div style="width: 34%;">
+              <video class="video" id="dynamic_part5_bottom" loop playsinline autoplay muted src="./resources/video/dyna2_1_.mp4" width="100%"></video>
+            </div>
+            <div style="width: 34%;">
+              <video class="video" id="dynamic_part6_bottom" loop playsinline autoplay muted src="./resources/video/dyna2_2_.mp4" width="100%"></video>
+            </div>
+          </div>
+        </div>
+        <br>
+
+        <h4 class="title is-5 has-text-centered">Scenes Editing</h4>
+        <p>Scenes Editing — Our scene representation is built from composable 3D Gaussian primitives, which enables direct, geometry-aware edits at the primitive level. Users can delete individual people or objects, apply rigid transforms (translation and rotation) to selected primitives, or transplant dynamic primitives from other scenes into the current scene — all without retraining the model. A diffusion-based refinement step then inpaints disocclusions and harmonizes appearance, while the model’s lifespan and per-pixel motion predictions preserve temporal coherence and correct 3D placement of edited elements.</p>
+
+        <!-- 上排两个视频（改为与下排两个分组对齐） -->
+        <div class="scenes-top-row" style="display:flex; justify-content:space-between; gap:1.5%; margin-bottom:40px;">
+          <!-- 与下排左侧 40% 分组对齐 -->
+          <div class="scenes-top-col" style="width:40%; position:relative; display:flex; justify-content:center;">
+            <div class="top-video-wrap" style="max-width:220px; position:relative;">
+              <video class="video top-video" id="scenes_edit1" loop playsinline autoplay muted src="./resources/video/edit1_0.mp4" width="100%"></video>
+              <!-- 斜向箭头指向该列下方的两个子视频 -->
+              <div class="arrow-wrap">
+                <div class="arrow left">
+                  <span class="chev">&#8595;</span>
+                  <div class="caption">Remove human</div>
+                </div>
+                <div class="arrow right">
+                  <span class="chev">&#8595;</span>
+                  <div class="caption">Character movement</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <br>
+
+          <!-- 与下排右侧 40% 分组对齐 -->
+          <div class="scenes-top-col" style="width:40%; position:relative; display:flex; justify-content:center;">
+            <div class="top-video-wrap" style="max-width:220px; position:relative;">
+              <video class="video top-video" id="scenes_edit2" loop playsinline autoplay muted src="./resources/video/edit2_0.mp4" width="100%"></video>
+              <div class="arrow-wrap">
+                <div class="arrow left">
+                  <span class="chev">&#8595;</span>
+                  <div class="caption">Remove vehicle</div>
+                </div>
+                <div class="arrow right">
+                  <span class="chev">&#8595;</span>
+                  <div class="caption">Vehicle movement</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <br>
+        <!-- 下排四个视频 -->
+        <div style="display: flex; justify-content: center; gap: 20%; margin-top: 40px;">
+          <div style="display: flex; gap: 10%; width: 40%; justify-content:center;">
+            <div style="width: 45%;">
+              <video class="video" id="scenes_edit3" loop playsinline autoplay muted src="./resources/video/edit1_1.mp4" width="100%"></video>
+            </div>
+            <div style="width: 45%;">
+              <video class="video" id="scenes_edit4" loop playsinline autoplay muted src="./resources/video/edit1_2.mp4" width="100%"></video>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10%; width: 40%; justify-content:center;">
+            <div style="width: 45%;">
+              <video class="video" id="scenes_edit5" loop playsinline autoplay muted src="./resources/video/edit2_1.mp4" width="100%"></video>
+            </div>
+            <div style="width: 45%;">
+              <video class="video" id="scenes_edit6" loop playsinline autoplay muted src="./resources/video/edit2_2.mp4" width="100%"></video>
+            </div>
+          </div>
+        </div>
+
+          
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <h3 class="title is-4 has-text-centered">More Results on Argoverse2</h3>
+    <p>We also evaluate our approach on Argoverse2</p>
+    <style>
+      .video-container {
+        position: relative;
+        width: 100%; /* 设置为100%以适配页面宽度 */
+        max-width: 1000px; /* 限制最大宽度 */
+        margin: 0 auto;
+        height: auto; /* 高度自动调整 */
+        aspect-ratio: 16 / 6; /* 确保视频比例为16:9 */
+      }
+
+      .video-container video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain; /* 确保视频完整显示 */
+      }
+
+      .dots-container {
+        display: flex;
+        justify-content: center;
+        margin-top: 1rem;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        margin: 0 5px;
+        background-color: #ccc;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+
+      .dot:hover,
+      .dot.active {
+        background-color: #666;
+      }
+    </style>
+
+    <div class="video-container">
+      <video id="mainVideo" playsinline preload="metadata" autoplay muted loop>
+        <source src="resources/argoverse/001.webm" type="video/mp4">
+      </video>
+    </div>
+
+    <div class="dots-container">
+      <div class="dot" data-video="resources/argoverse/001.webm"></div>
+      <div class="dot" data-video="resources/argoverse/002.webm"></div>
+      <div class="dot" data-video="resources/argoverse/003.webm"></div>
+      <div class="dot" data-video="resources/argoverse/004.webm"></div>
+      <div class="dot" data-video="resources/argoverse/005.webm"></div>
+      <div class="dot" data-video="resources/argoverse/006.webm"></div>
+      <div class="dot" data-video="resources/argoverse/007.webm"></div>
+      <div class="dot" data-video="resources/argoverse/008.webm"></div>
+      <div class="dot" data-video="resources/argoverse/009.webm"></div>
+      <div class="dot" data-video="resources/argoverse/010.webm"></div>
+    </div>
+
+    <script>
+      const mainVideo = document.getElementById('mainVideo');
+      const dots = document.querySelectorAll('.dot');
+
+      dots.forEach((dot, index) => {
+        dot.addEventListener('mouseover', () => {
+          const videoSrc = dot.getAttribute('data-video');
+          const currentSource = mainVideo.querySelector('source');
+
+          if (currentSource.src !== videoSrc) {
+            const tempVideo = document.createElement('video');
+            tempVideo.src = videoSrc;
+
+            tempVideo.addEventListener('loadeddata', () => {
+              currentSource.src = videoSrc;
+              mainVideo.load();
+              mainVideo.play();
+
+              // 更新激活状态
+              dots.forEach(d => d.classList.remove('active'));
+              dot.classList.add('active');
+            });
+          }
+        });
+
+        // 默认激活第一个小圆点
+        if (index === 0) {
+          dot.classList.add('active');
+        }
+      });
+    </script>
+  </div>
+</section>
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <h3 class="title is-4 has-text-centered">More Results on Nuscenes</h3>
+    <p>We also evaluate our approach on Nuscenes</p>
+    <style>
+      .video-container {
+        position: relative;
+        width: 100%; /* 设置为100%以适配页面宽度 */
+        max-width: 1000px; /* 限制最大宽度 */
+        margin: 0 auto;
+        height: auto; /* 高度自动调整 */
+        aspect-ratio: 16 / 6; /* 确保视频比例为16:9 */
+      }
+
+      .video-container video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain; /* 确保视频完整显示 */
+      }
+
+      .dots-container {
+        display: flex;
+        justify-content: center;
+        margin-top: 1rem;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        margin: 0 5px;
+        background-color: #ccc;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+
+      .dot:hover,
+      .dot.active {
+        background-color: #666;
+      }
+    </style>
+
+    <div class="video-container">
+      <video id="mainVideo_nu" playsinline preload="metadata" autoplay muted loop>
+        <source src="resources/nuscene/002.webm" type="video/mp4">
+      </video>
+    </div>
+
+    <div class="dots-container">
+      <div class="dot" data-video="resources/nuscene/001.webm"></div>
+      <div class="dot" data-video="resources/nuscene/002.webm"></div>
+      <div class="dot" data-video="resources/nuscene/003.webm"></div>
+      <div class="dot" data-video="resources/nuscene/004.webm"></div>
+      <div class="dot" data-video="resources/nuscene/005.webm"></div>
+      <div class="dot" data-video="resources/nuscene/006.webm"></div>
+      <div class="dot" data-video="resources/nuscene/007.webm"></div>
+      <div class="dot" data-video="resources/nuscene/008.webm"></div>
+      <div class="dot" data-video="resources/nuscene/009.webm"></div>
+      <div class="dot" data-video="resources/nuscene/010.webm"></div>
+    </div>
+    <script>
+      const mainVideo_nu = document.getElementById('mainVideo_nu');
+      const dots_nu = document.querySelectorAll('.dot');
+
+      dots_nu.forEach((dot, index) => {
+        dot.addEventListener('mouseover', () => {
+          const videoSrc = dot.getAttribute('data-video');
+          const currentSource = mainVideo_nu.querySelector('source');
+
+          if (currentSource.src !== videoSrc) {
+            const tempVideo = document.createElement('video');
+            tempVideo.src = videoSrc;
+
+            tempVideo.addEventListener('loadeddata', () => {
+              currentSource.src = videoSrc;
+              mainVideo_nu.load();
+              mainVideo_nu.play();
+
+              // 更新激活状态
+              dots_nu.forEach(d => d.classList.remove('active'));
+              dot.classList.add('active');
+            });
+          }
+        });
+
+        // 默认激活第一个小圆点
+        if (index === 0) {
+          dot.classList.add('active');
+        }
+      });
+    </script>
+  </div>
+</section>
+
+
+
+
+</body>
+</html>
