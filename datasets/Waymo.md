@@ -140,7 +140,11 @@ python datasets/tools/extract_masks.py \
     --split_file data/waymo_example_scenes.txt \
     --process_dynamic_mask
 ```
-Replace `/pathtosegformer` with the actual path to your Segformer installation.
+
+The `--split_file data/waymo_example_scenes.txt` can be replaced with `--start_idx 0 --num_scenes 200` to process scenes by index range, or omitted entirely to use default settings.
+
+Replace `/path/to/segformer` with the actual path to your Segformer installation.
+
 
 Note: The `--process_dynamic_mask` flag is included to process fine dynamic masks along with sky masks.
 
@@ -162,6 +166,7 @@ ProjectPath/data/
               │  ├──ego_pose/           # ego-vehicle to world transformations (4x4): {timestep:03d}.txt
               │  ├──depth_flows_4/      # downsampled (1/4) depth flow maps: {timestep:03d}_{cam_id}.npy
               │  ├──dynamic_masks/      # bounding-box-generated dynamic masks: {timestep:03d}_{cam_id}.png
+              │  ├──fine-dynamic_masks/ # more precise dynamic masks :   {timestep:03d}_{cam_id}.png
               │  ├──ground_label_4/     # downsampled (1/4) ground labels extracted from point cloud, used for flow evaluation only: {timestep:03d}.txt
               │  ├──images/             # original camera images: {timestep:03d}_{cam_id}.jpg
               │  ├──images_4/           # downsampled (1/4) camera images: {timestep:03d}_{cam_id}.jpg

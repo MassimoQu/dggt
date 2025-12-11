@@ -49,9 +49,10 @@ def visualize_depth(x, acc=None, lo=4.0, hi=120.0, depth_curve_fn=lambda x: -np.
     min_allowed = lo_f + 0.01
     if min_allowed > hi_f:
         min_allowed = hi_f
-    depth = np.where(np.isfinite(depth), depth, min_allowed)
 
-    depth[depth <= 0.0] = min_allowed
+    invalid_mask = (~np.isfinite(depth)) | (depth == 0.0)
+
+    depth = np.where(invalid_mask, hi_f + 1.0, depth)
 
     depth[depth < lo_f] = min_allowed
 
@@ -79,7 +80,10 @@ def visualize_depth(x, acc=None, lo=4.0, hi=120.0, depth_curve_fn=lambda x: -np.
         norm = (transformed - t_min) / (t_max - t_min)
         norm = np.clip(norm, 0.0, 1.0)
     norm = np.nan_to_num(norm, nan=0.0, posinf=1.0, neginf=0.0)
-
+    
+    # Map invalid pixels to 0.0 (dark blue - furthest distance in turbo colormap)
+    norm[invalid_mask] = 0.0
+    
     cmap = cm.get_cmap('turbo')
     colored = cmap(norm)[..., :3]
 
@@ -89,6 +93,69 @@ def visualize_depth(x, acc=None, lo=4.0, hi=120.0, depth_curve_fn=lambda x: -np.
             colored = colored * acc_arr[..., None]
 
     return (colored * 255.0).astype(np.uint8)
+
+
+def visualize_depth_gt(x, acc=None, use_percentile_clip=True, pct_low=2.0, pct_high=98.0, max_clip_m=None, gamma=1.0, cmap_name='turbo', vmin=None, vmax=None):
+    depth_all = np.asarray(x).astype(np.float32)
+    if depth_all.ndim == 3 and depth_all.shape[2] >= 1:
+        depth = depth_all[..., 0]
+    else:
+        depth = depth_all
+
+    zero_count = int(np.sum(depth == 0.0))
+    nan_count = int(np.sum(~np.isfinite(depth)))
+
+    finite_mask = np.isfinite(depth)
+
+    if vmin is not None and vmax is not None:
+        vmin = float(vmin)
+        vmax = float(vmax)
+    else:
+        if max_clip_m is not None:
+            vmin = float(np.nanmin(depth[finite_mask])) if finite_mask.any() else 0.0
+            vmax = float(max_clip_m)
+        else:
+            if use_percentile_clip and finite_mask.any():
+                vmin = float(np.percentile(depth[finite_mask], pct_low))
+                vmax = float(np.percentile(depth[finite_mask], pct_high))
+                if np.isclose(vmin, vmax):
+                    vmin = float(np.nanmin(depth[finite_mask]))
+                    vmax = float(np.nanmax(depth[finite_mask]))
+            else:
+                vmin = float(np.nanmin(depth[finite_mask])) if finite_mask.any() else 0.0
+                vmax = float(np.nanmax(depth[finite_mask])) if finite_mask.any() else 1.0
+
+    if np.isclose(vmax, vmin):
+        vmax = vmin + 1e-6
+    depth_clipped = np.clip(depth, vmin, vmax)
+    raw_norm = (depth_clipped - vmin) / (vmax - vmin + 1e-12)
+    raw_norm = np.clip(raw_norm, 0.0, 1.0).astype(np.float32)
+
+    zero_mask = (depth == 0.0)
+    invalid_mask = (~np.isfinite(depth)) | zero_mask
+    if invalid_mask.any():
+        raw_norm[invalid_mask] = 0.0
+
+    display_norm = raw_norm.copy()
+    if gamma != 1.0:
+        display_norm = np.power(np.clip(display_norm, 0.0, 1.0), float(gamma))
+
+    display_norm = np.clip(display_norm, 0.0, 1.0).astype(np.float32)
+
+    cmap = cm.get_cmap(cmap_name)
+    depth_color = cmap(display_norm)[..., :3]
+    depth_color = (depth_color * 255.0).astype(np.uint8)
+
+    if acc is not None:
+        try:
+            acc_arr = np.asarray(acc)
+            if acc_arr.shape == display_norm.shape:
+                mul = acc_arr[..., None].astype(np.float32)
+                depth_color = np.clip(depth_color.astype(np.float32) * mul, 0, 255).astype(np.uint8)
+        except Exception:
+            pass
+
+    return depth_color
 
 def _compose_quad_canvas(
     gt_rgb,
@@ -308,7 +375,7 @@ def make_comparison_video_quad(
     fps=8,
     views=3,
     titles=("GT", "Prediction", "Dynamic Map", "Depth"),
-    cmap_name='plasma'
+    cmap_name='turbo', return_metrics=False, write_video=True
 ):
     import math, numpy as np, cv2, imageio, warnings, torch
 
@@ -316,6 +383,63 @@ def make_comparison_video_quad(
         if isinstance(x, torch.Tensor):
             return x.detach().cpu().numpy()
         return np.asarray(x)
+
+    def _sample_color_from_image(img, mask=None):
+        try:
+            a = np.asarray(img)
+            if a.ndim != 3 or a.shape[2] != 3:
+                return (2, 4, 122)
+            vals = a.reshape(-1, 3)
+            if mask is not None:
+                m = np.asarray(mask, dtype=bool)
+                if m.shape != a.shape[:2]:
+                    try:
+                        m = cv2.resize(m.astype(np.uint8), (a.shape[1], a.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
+                    except Exception:
+                        m = np.zeros(a.shape[:2], dtype=bool)
+                if m.any():
+                    sel = a[m]
+                    if sel.size == 0:
+                        vals_sel = vals
+                    else:
+                        vals_sel = sel.reshape(-1, 3)
+                else:
+                    vals_sel = vals
+            else:
+                vals_sel = vals
+            # find most frequent color
+            uniq, counts = np.unique(vals_sel, axis=0, return_counts=True)
+            if uniq.shape[0] == 0:
+                return (2, 4, 122)
+            top_idx = int(np.argmax(counts))
+            top_bgr = tuple(int(x) for x in uniq[top_idx])
+            # convert BGR->RGB for consistency with prints
+            return (top_bgr[2], top_bgr[1], top_bgr[0])
+        except Exception:
+            return (2, 4, 122)
+
+    def linear_align(gt, pred, mask):
+        try:
+            if mask is None:
+                return pred, None, None
+            mask_arr = np.asarray(mask, dtype=bool)
+            if mask_arr.sum() == 0:
+                return pred, None, None
+            gt_v = np.asarray(gt)[mask_arr].astype(np.float64)
+            pred_v = np.asarray(pred)[mask_arr].astype(np.float64)
+            if gt_v.size == 0 or pred_v.size == 0:
+                return pred, None, None
+            A = np.vstack([pred_v, np.ones_like(pred_v)]).T
+            sol, *_ = np.linalg.lstsq(A, gt_v, rcond=None)
+            a, b = float(sol[0]), float(sol[1])
+            aligned = a * np.asarray(pred).astype(np.float64) + b
+            return aligned.astype(np.float32), a, b
+        except Exception:
+            return pred, None, None
+
+    def _print_depth_distribution(name, arr, mask=None, bins=20):
+        # removed debug printing; kept as a noop stub for compatibility
+        return None
 
     def fit_no_resize(img, H, W, bgcolor=(255,255,255)):
         if img is None:
@@ -402,15 +526,17 @@ def make_comparison_video_quad(
     cell_h = disp_h
     cell_w = (3 * disp_w + 2 * spacer) if views == 3 else disp_w
 
-    # writers
+    # writers (only create if writing video)
     writer = None
     cv_writer = None
-    try:
-        writer = imageio.get_writer(out_path, fps=fps)
-    except Exception as e:
-        warnings.warn(f"imageio writer failed ({e}); will fallback to OpenCV later if needed", UserWarning)
+    if write_video:
+        try:
+            writer = imageio.get_writer(out_path, fps=fps)
+        except Exception as e:
+            warnings.warn(f"imageio writer failed ({e}); will fallback to OpenCV later if needed", UserWarning)
 
     processed = []
+    # (no tri-view metrics needed)
 
     if views == 1:
         for t in range(S):
@@ -432,32 +558,173 @@ def make_comparison_video_quad(
 
             # depth
             gdep = to_np(gt_depth[t])
-            if gdep.ndim == 3 and gdep.shape[2]==1: gdep = gdep[:,:,0]
-            sky = _get_sky_mask_for_frame(sky_mask_frames, t, gdep.shape[0], gdep.shape[1])
+            if gdep is None:
+                gdep = np.array([])
+            if getattr(gdep, 'ndim', 0) == 3 and gdep.shape[2]==1:
+                gdep = gdep[:,:,0]
+
+            # also get pred depth early so we can robustly determine sizes
+            pdep = to_np(depth_frames[t])
+            if pdep is None:
+                pdep = np.array([])
+            if getattr(pdep, 'ndim', 0) == 3 and pdep.shape[2]==1:
+                pdep = pdep[:,:,0]
+
+            # Determine sizes robustly: prefer GT depth if 2D, else use pred depth, else fallback to display size
+            if getattr(gdep, 'ndim', 0) >= 2:
+                H_g, W_g = int(gdep.shape[0]), int(gdep.shape[1])
+            elif getattr(pdep, 'ndim', 0) >= 2:
+                H_g, W_g = int(pdep.shape[0]), int(pdep.shape[1])
+            else:
+                H_g, W_g = disp_h, disp_w
+
+            # Keep original GT depth values for sky pixels (do NOT map them to 'furthest').
+            # We still obtain the sky mask (resized if needed) because it may be used
+            # later for alignment/masking, but we must not overwrite GT depth here.
+            sky = _get_sky_mask_for_frame(sky_mask_frames, t, H_g, W_g)
             if sky is not None:
                 m = np.asarray(sky).astype(bool)
-                if m.shape != gdep.shape:
-                    m = cv2.resize(m.astype(np.uint8), (gdep.shape[1], gdep.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
-                gdep[m] = 10.0
-            gt_depth_col = visualize_depth(gdep, lo=0.10, hi=8.0, depth_curve_fn=lambda x: -np.log(x + 1e-6))
-            gt_depth_col = fit_no_resize(gt_depth_col, cell_h, cell_w)
+                if m.shape != (H_g, W_g):
+                    m = cv2.resize(m.astype(np.uint8), (W_g, H_g), interpolation=cv2.INTER_NEAREST).astype(bool)
+            else:
+                m = None
 
-            pdep = to_np(depth_frames[t])
-            if pdep.ndim == 3 and pdep.shape[2]==1: pdep = pdep[:,:,0]
+            # Get sky mask at pred resolution
             sky_p = _get_sky_mask_for_frame(sky_mask_frames, t, pdep.shape[0], pdep.shape[1])
             if sky_p is not None:
-                m = np.asarray(sky_p).astype(bool)
-                if m.shape != pdep.shape:
-                    m = cv2.resize(m.astype(np.uint8), (pdep.shape[1], pdep.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
-                pdep[m] = 10.0
-            pred_depth_col = visualize_depth(pdep, lo=0.10, hi=8.0, depth_curve_fn=lambda x: -np.log(x + 1e-6))
+                m_pred = np.asarray(sky_p).astype(bool)
+                if m_pred.shape != pdep.shape:
+                    m_pred = cv2.resize(m_pred.astype(np.uint8), (pdep.shape[1], pdep.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
+                # mark pred sky with a large value so visualize_depth treats it consistently
+                pdep_masked = pdep.copy().astype(np.float32)
+                pdep_masked[m_pred] = 10.0
+            else:
+                m_pred = None
+                pdep_masked = pdep.copy().astype(np.float32)
+
+            # Generate pred visualization first so we can sample the sky color
+            try:
+                pdep_vis_for_viz = pdep_masked.copy()
+            except Exception:
+                pdep_vis_for_viz = pdep_masked
+            pred_depth_col_full = visualize_depth(pdep_vis_for_viz, lo=viz_lo if 'viz_lo' in locals() else 0.10, hi=viz_hi if 'viz_hi' in locals() else 8.0, depth_curve_fn=viz_fn if 'viz_fn' in locals() else (lambda x: -np.log(x + 1e-6)))
+            # sample color from pred visualization at sky mask; fallback deterministic if none
+            sampled_rgb = _sample_color_from_image(pred_depth_col_full, mask=m_pred)
+            try:
+                if gdep.shape != pdep.shape:
+                    gdep_resized = cv2.resize(gdep.astype(np.float32), (pdep.shape[1], pdep.shape[0]), interpolation=cv2.INTER_LINEAR)
+                else:
+                    gdep_resized = gdep.astype(np.float32)
+            except Exception:
+                gdep_resized = gdep.astype(np.float32)
+            
+            # Get sky mask at pred resolution for GT
+            sky_gt = _get_sky_mask_for_frame(sky_mask_frames, t, gdep_resized.shape[0], gdep_resized.shape[1])
+            if sky_gt is not None:
+                m_gt = np.asarray(sky_gt).astype(bool)
+                if m_gt.shape != gdep_resized.shape:
+                    m_gt = cv2.resize(m_gt.astype(np.uint8), (gdep_resized.shape[1], gdep_resized.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
+            else:
+                m_gt = None
+            
+            try:
+                # Build masks: exclude non-finite and zero-valued depths
+                try:
+                    pred_mask = np.isfinite(pdep) & (pdep != 0.0)
+                except Exception:
+                    pred_mask = np.isfinite(pdep)
+                try:
+                    gt_mask = np.isfinite(gdep_resized) & (gdep_resized != 0.0)
+                except Exception:
+                    gt_mask = np.isfinite(gdep_resized)
+                
+                if m_gt is not None:
+                    mask_common = (~m_gt) & gt_mask & pred_mask
+                else:
+                    mask_common = gt_mask & pred_mask
+                
+                # Align GT to pred: find a, b such that a*pred + b ≈ gt
+                gdep_aligned, a_coef, b_coef = linear_align(pdep, gdep_resized, mask_common)
+                
+                # compute depth RMSE on mask_common
+                try:
+                    if mask_common is None or np.count_nonzero(mask_common) == 0:
+                        depth_rmse = float('nan')
+                    else:
+                        pred_vals = np.asarray(pdep)[mask_common].astype(np.float64)
+                        gt_vals = np.asarray(gdep_aligned)[mask_common].astype(np.float64)
+                        valid = np.isfinite(gt_vals) & np.isfinite(pred_vals)
+                        if valid.sum() == 0:
+                            depth_rmse = float('nan')
+                        else:
+                            dif = pred_vals[valid] - gt_vals[valid]
+                            depth_rmse = float(np.sqrt(np.mean(dif * dif)))
+                except Exception:
+                    depth_rmse = float('nan')
+            except Exception:
+                gdep_aligned = gdep_resized
+                depth_rmse = None
+            
+            # Do NOT overwrite invalid GT values with a finite far-value here.
+            # Keep invalids as NaN so visualize_depth can map them to the "far" color
+            # via its invalid_mask logic. Also treat 0-values as invalid for
+            # visualization so both GT (aligned) and pred use the same mapping.
+            try:
+                invalid_gt = ~np.isfinite(gdep_aligned)
+                num_invalid = int(np.sum(invalid_gt))
+            except Exception:
+                pass
+
+            # Treat zeros as invalid (set to NaN) so they map to the far color in visualize_depth
+            try:
+                gdep_vis = gdep_aligned.astype(np.float32)
+            except Exception:
+                gdep_vis = gdep_aligned.astype(np.float32)
+            # keep zero mask (only zeros, not NaN)
+            try:
+                zero_mask_gt = (gdep_resized == 0.0)
+            except Exception:
+                zero_mask_gt = (gdep_aligned == 0.0)
+            try:
+                gdep_vis[gdep_vis == 0.0] = np.nan
+            except Exception:
+                pass
+
+            try:
+                pdep_vis = pdep_masked.astype(np.float32)
+                pdep_vis[pdep_vis == 0.0] = np.nan
+            except Exception:
+                pdep_vis = pdep_masked
+
+            # Use the SAME visualization routine and parameters for GT and Pred
+            viz_lo, viz_hi = 0.10, 8.0
+            viz_fn = lambda x: -np.log(x + 1e-6)
+            gt_depth_col = visualize_depth(gdep_vis, lo=viz_lo, hi=viz_hi, depth_curve_fn=viz_fn)
+            # override GT zeros with sampled RGB from pred sky
+            try:
+                if zero_mask_gt is not None:
+                    zr = zero_mask_gt
+                    if zr.shape != gt_depth_col.shape[:2]:
+                        zr = cv2.resize(zr.astype(np.uint8), (gt_depth_col.shape[1], gt_depth_col.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
+                    if zr.any():
+                        r,g,b = sampled_rgb
+                        # gt_depth_col is RGB uint8
+                        gt_depth_col[zr] = np.array([r,g,b], dtype=np.uint8)
+            except Exception:
+                pass
+            gt_depth_col = fit_no_resize(gt_depth_col, cell_h, cell_w)
+
+            pred_depth_col = pred_depth_col_full if 'pred_depth_col_full' in locals() else visualize_depth(pdep_vis, lo=viz_lo, hi=viz_hi, depth_curve_fn=viz_fn)
             pred_depth_col = fit_no_resize(pred_depth_col, cell_h, cell_w)
 
             processed.append({
                 "top_left": gt_rgb, "top_right": pred_rgb,
                 "mid_left": gt_dyn_col, "mid_right": pred_dyn_col,
                 "bot_left": gt_depth_col, "bot_right": pred_depth_col,
-                "t": t
+                "t": t,
+                "depth_rmse": depth_rmse,
+                "a_coef": a_coef if 'a_coef' in locals() else None,
+                "b_coef": b_coef if 'b_coef' in locals() else None,
             })
 
     else:  # views == 3
@@ -494,25 +761,114 @@ def make_comparison_video_quad(
             def get_depth_comp(idx_source):
                 c0 = to_np(idx_source[idx0 := 0]) if False else None  # dummy to satisfy linter
             # process depth for indices
+            # prepare a dict to store alignment info per index
+            alignment_info = {}
+            
             def process_depth_for(idx):
                 dnp = to_np(gt_depth[idx])
                 if dnp.ndim==3 and dnp.shape[2]==1: dnp = dnp[:,:,0]
-                sky = _get_sky_mask_for_frame(sky_mask_frames, idx, dnp.shape[0], dnp.shape[1])
-                if sky is not None:
-                    m = np.asarray(sky).astype(bool)
-                    if m.shape != dnp.shape:
-                        m = cv2.resize(m.astype(np.uint8), (dnp.shape[1], dnp.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
-                    dnp[m] = 10.0
-                return visualize_depth(dnp, lo=0.10, hi=8.0, depth_curve_fn=lambda x: -np.log(x + 1e-6))
+                
+                # Get pred depth for this index
+                pred_d = to_np(depth_frames[idx])
+                if pred_d.ndim==3 and pred_d.shape[2]==1: pred_d = pred_d[:,:,0]
+                
+                # Get sky mask at pred resolution
+                sky_p = _get_sky_mask_for_frame(sky_mask_frames, idx, pred_d.shape[0], pred_d.shape[1])
+                if sky_p is not None:
+                    m_pred = np.asarray(sky_p).astype(bool)
+                    if m_pred.shape != pred_d.shape:
+                        m_pred = cv2.resize(m_pred.astype(np.uint8), (pred_d.shape[1], pred_d.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
+                    pred_d[m_pred] = 10.0
+                else:
+                    m_pred = None
+                
+                # Resize GT to match pred
+                try:
+                    if dnp.shape != pred_d.shape:
+                        dnp_resized = cv2.resize(dnp.astype(np.float32), (pred_d.shape[1], pred_d.shape[0]), interpolation=cv2.INTER_LINEAR)
+                    else:
+                        dnp_resized = dnp.astype(np.float32)
+                except Exception:
+                    dnp_resized = dnp.astype(np.float32)
+                
+                # Get sky mask at pred resolution for GT
+                sky_gt = _get_sky_mask_for_frame(sky_mask_frames, idx, dnp_resized.shape[0], dnp_resized.shape[1])
+                if sky_gt is not None:
+                    m_gt = np.asarray(sky_gt).astype(bool)
+                    if m_gt.shape != dnp_resized.shape:
+                        m_gt = cv2.resize(m_gt.astype(np.uint8), (dnp_resized.shape[1], dnp_resized.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
+                else:
+                    m_gt = None
+                
+                # Align GT depth to pred depth
+                try:
+                    try:
+                        pred_mask = np.isfinite(pred_d) & (pred_d != 0.0)
+                    except Exception:
+                        pred_mask = np.isfinite(pred_d)
+                    try:
+                        gt_mask = np.isfinite(dnp_resized) & (dnp_resized != 0.0)
+                    except Exception:
+                        gt_mask = np.isfinite(dnp_resized)
+                    
+                    if m_gt is not None:
+                        mask_common = (~m_gt) & gt_mask & pred_mask
+                    else:
+                        mask_common = gt_mask & pred_mask
+                    
+                    dnp_aligned, a_coef, b_coef = linear_align(pred_d, dnp_resized, mask_common)
+                    alignment_info[idx] = (a_coef, b_coef)
+                except Exception:
+                    dnp_aligned = dnp_resized
+                    alignment_info[idx] = (None, None)
+                
+                # Do NOT overwrite invalid GT values with a finite far-value here.
+                # Keep invalids as NaN so visualize_depth can map them to the "far" color.
+                try:
+                    invalid_gt = ~np.isfinite(dnp_aligned)
+                    num_invalid = int(np.sum(invalid_gt))
+                except Exception:
+                    pass
+
+                # Treat zeros as invalid (set to NaN) so they map to the far color in visualize_depth
+                try:
+                    dnp_vis = dnp_aligned.astype(np.float32)
+                    dnp_vis[dnp_vis == 0.0] = np.nan
+                except Exception:
+                    dnp_vis = dnp_aligned
+
+                # Use same visualization routine/params as predictions so GT and Pred look comparable
+                # First generate pred visualization for sampling sky color
+                try:
+                    pred_vis_tmp = visualize_depth(pred_d, lo=0.10, hi=8.0, depth_curve_fn=lambda x: -np.log(x + 1e-6))
+                except Exception:
+                    pred_vis_tmp = None
+                sampled_rgb_idx = _sample_color_from_image(pred_vis_tmp, mask=m_pred)
+                vis = visualize_depth(dnp_vis, lo=0.10, hi=8.0, depth_curve_fn=lambda x: -np.log(x + 1e-6))
+                # override only zero-valued positions (not NaN)
+                try:
+                    zero_mask_idx = (dnp == 0.0)
+                    if zero_mask_idx.shape != vis.shape[:2]:
+                        zero_mask_idx = cv2.resize(zero_mask_idx.astype(np.uint8), (vis.shape[1], vis.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
+                    if zero_mask_idx.any():
+                        r,g,b = sampled_rgb_idx
+                        vis[zero_mask_idx] = np.array([r,g,b], dtype=np.uint8)
+                except Exception:
+                    pass
+                return vis
+            
             def process_pred_depth_for(idx):
                 dnp = to_np(depth_frames[idx])
                 if dnp.ndim==3 and dnp.shape[2]==1: dnp = dnp[:,:,0]
-                sky = _get_sky_mask_for_frame(sky_mask_frames, idx, dnp.shape[0], dnp.shape[1])
-                if sky is not None:
-                    m = np.asarray(sky).astype(bool)
-                    if m.shape != dnp.shape:
-                        m = cv2.resize(m.astype(np.uint8), (dnp.shape[1], dnp.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
-                    dnp[m] = 10.0
+                
+                # Get sky mask at pred resolution
+                sky_p = _get_sky_mask_for_frame(sky_mask_frames, idx, dnp.shape[0], dnp.shape[1])
+                if sky_p is not None:
+                    m_pred = np.asarray(sky_p).astype(bool)
+                    if m_pred.shape != dnp.shape:
+                        m_pred = cv2.resize(m_pred.astype(np.uint8), (dnp.shape[1], dnp.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
+                    dnp[m_pred] = 10.0
+                
                 return visualize_depth(dnp, lo=0.10, hi=8.0, depth_curve_fn=lambda x: -np.log(x + 1e-6))
 
             # build depth tri-views (GT and Pred)
@@ -628,16 +984,36 @@ def make_comparison_video_quad(
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             cv_writer = cv2.VideoWriter(out_path, fourcc, float(fps), (canvas_p.shape[1], canvas_p.shape[0]))
 
+        if write_video:
+            if writer is not None:
+                writer.append_data(canvas_p)
+            elif cv_writer is not None:
+                try:
+                    bgr = cv2.cvtColor(canvas_p, cv2.COLOR_RGB2BGR)
+                    cv_writer.write(bgr)
+                except Exception:
+                    pass
+    if write_video:
         if writer is not None:
-            writer.append_data(canvas_p)
-        elif cv_writer is not None:
-            try:
-                bgr = cv2.cvtColor(canvas_p, cv2.COLOR_RGB2BGR)
-                cv_writer.write(bgr)
-            except Exception:
-                pass
-    if writer is not None:
-        writer.close()
-    if cv_writer is not None:
-        cv_writer.release()
-    return out_path
+            writer.close()
+        if cv_writer is not None:
+            cv_writer.release()
+
+    # If not writing video, print per-frame depth RMSE and scene average (single-view only)
+    if not write_video:
+        try:
+            vals = []
+            for item in processed:
+                v = item.get('depth_rmse')
+                vals.append(v)
+                print(f"t={item.get('t')} depth_rmse={v}")
+            # compute average ignoring None and NaN
+            valid_vals = [x for x in vals if x is not None and not (isinstance(x, float) and np.isnan(x))]
+            avg = float(np.mean(valid_vals)) if len(valid_vals) > 0 else float('nan')
+            print(f"scene_average_depth_rmse={avg}")
+        except Exception:
+            pass
+
+    if return_metrics:
+        return (out_path, processed) if write_video else processed
+    return out_path if write_video else None

@@ -45,8 +45,8 @@ This codebase provides support for Waymo Open Dataset, Nuscenes and Argoverse2. 
 | Dataset | Instruction |
 |---------|-------------|
 | Waymo | [Data Process Instruction](datasets/Waymo.md) |
-| NuScenes | [Data Process Instruction](datasets/NuScenes.md) |
 | Argoverse2 | [Data Process Instruction](datasets/ArgoVerse2.md) |
+| NuScenes | [Data Process Instruction](datasets/NuScenes.md) |
 
 
 ## Installation

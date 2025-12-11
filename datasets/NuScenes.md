@@ -1,4 +1,5 @@
 # Preparing NuScenes Dataset
+> Note: This document is modified from [Drivestudio](https://github.com/ziyc/drivestudio/blob/main/docs/NuScenes.md)
 
 Before downloading or using the NuScenes dataset, please follow these important steps:
 

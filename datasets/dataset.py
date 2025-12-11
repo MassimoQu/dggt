@@ -32,6 +32,8 @@ def resize_flow(flow, target_size):
     flow = flow.permute(0, 2, 3, 1)
     flow[torch.norm(flow, p=2, dim=-1) > 1000] = 0
     return flow.squeeze()
+
+    
 def load_and_preprocess_flow(flow_path_list, extrinsic_paths, intrinsic_path, height, width):
     if len(flow_path_list) == 0:
         raise ValueError("At least 1 image is required")
@@ -41,15 +43,22 @@ def load_and_preprocess_flow(flow_path_list, extrinsic_paths, intrinsic_path, he
     to_tensor = TF.ToTensor()
     target_size = 518
 
-    for flow_path in flow_path_list:
+    # print(f"[DEBUG] flow_path_list: {flow_path_list}")
+    for i, flow_path in enumerate(flow_path_list):
+        # print(f"[DEBUG] Processing flow_path[{i}]: {flow_path}")
+        # print(f"[DEBUG] Is file: {os.path.isfile(flow_path) if flow_path else 'Empty/None'}")
+        # print(f"[DEBUG] Is dir: {os.path.isdir(flow_path) if flow_path else 'Empty/None'}")
         depth_and_flow = np.load(flow_path)
-        flow = depth_and_flow[..., 1:]
+        flow = depth_and_flow
         flow = torch.tensor(flow).float()
         flow = resize_flow(flow, (height, width))
         flows.append(flow)
     
     return torch.stack(flows)
+
+
 def load_and_preprocess_images(image_path_list, mode="crop"):
+    # Check for empty list
     if len(image_path_list) == 0:
         raise ValueError("At least 1 image is required")
     
@@ -58,20 +67,30 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
     to_tensor = TF.ToTensor()
     target_size = 518
 
+    # First process all images and collect their shapes
     for image_path in image_path_list:
 
         # Open image
         img = Image.open(image_path)
 
+        # If there's an alpha channel, blend onto white background:
         if img.mode == "RGBA":
+            # Create white background
             background = Image.new("RGBA", img.size, (255, 255, 255, 255))
+            # Alpha composite onto the white background
             img = Image.alpha_composite(background, img)
 
+        # Now convert to "RGB" (this step assigns white for transparent areas)
         img = img.convert("RGB")
 
         width, height = img.size
+        
+        # Original behavior: set width to 518px
         new_width = target_size
+        # Calculate height maintaining aspect ratio, divisible by 14
         new_height = round(height * (new_width / width) / 14) * 14
+
+        # Resize with new dimensions (width, height)
         img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
         img = to_tensor(img)  # Convert to tensor (0, 1)
 
@@ -81,10 +100,16 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
 
         shapes.add((img.shape[1], img.shape[2]))
         images.append(img)
+
+    # Check if we have different shapes
+    # In theory our model can also work well with different shapes
     if len(shapes) > 1:
         print(f"Warning: Found images with different shapes: {shapes}")
+        # Find maximum dimensions
         max_height = max(shape[0] for shape in shapes)
         max_width = max(shape[1] for shape in shapes)
+
+        # Pad images if necessary
         padded_images = []
         for img in images:
             h_padding = max_height - img.shape[1]
@@ -101,8 +126,10 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
                 )
             padded_images.append(img)
         images = padded_images
-    images = torch.stack(images)
+    images = torch.stack(images)  # concatenate images
+    # Ensure correct shape when single image
     if len(image_path_list) == 1:
+        # Verify shape is (1, C, H, W)
         if images.dim() == 3:
             images = images.unsqueeze(0)
 
@@ -142,6 +169,7 @@ class WaymoOpenDataset(Dataset):
         self.load_flow = load_flow
         self.views = views
 
+        # Scan all scene folders and collect image paths
         if scene_names is None:
             scene_names = [] 
             scene_names_ = [f"{i:03d}" for i in range(0, 99)]
@@ -290,17 +318,6 @@ class WaymoOpenDataset(Dataset):
                 else:
                     self.semantic_mask_path.append([] if self.views == 1 else [[] for _ in range(3)])
 
-                # if load_flow:
-                #     depth_flow_paths  = os.path.join(image_dir, scene_name, "depth_flows_4")
-                #     if os.path.isdir(depth_flow_paths):
-                #         depth_flow_paths = sorted([
-                #             os.path.join(depth_flow_paths, f)
-                #             for f in os.listdir(depth_flow_paths)
-                #             if f.endswith("_0.npy") #if f.endswith(("_0.jpg", "_1.jpg", "_2.jpg", "_0.png", "_1.png", "_2.png"))
-                #         ])
-                #         self.depth_flow_paths.append(depth_flow_paths)
-                #     else:
-                #         self.depth_flow_paths.append([])
 
     def __len__(self):
         return len(self.scenes)
@@ -438,16 +455,31 @@ class WaymoOpenDataset(Dataset):
                     dynamic_mask = load_and_preprocess_images(dy_mask_seq)  # [S*3, C, H, W]
                 input_dict["dynamic_mask"] = dynamic_mask
 
-            if len(self.depth_flow_paths) > 0:
+            if len(self.depth_flow_paths) > 0 and len(self.depth_flow_paths[idx]) > 0:
                 if self.views == 1:
-                    depth_seq = [self.depth_flow_paths[idx][i] for i in indices]
-                    depth_data = load_and_preprocess_flow(depth_seq, None, None, images.shape[2], images.shape[3])
+                    if len(self.depth_flow_paths[idx]) > 0:
+                        depth_seq = [self.depth_flow_paths[idx][i] for i in indices]
+                        depth_data = load_and_preprocess_flow(depth_seq, None, None, images.shape[2], images.shape[3])
+                    else:
+                        depth_data = torch.zeros(len(indices), images.shape[2], images.shape[3])
+                    input_dict["gt_depth"] = depth_data
                 elif self.views == 3:
-                    depth_seq = []
-                    for i in indices:
-                        for v in range(3):
-                            depth_seq.append(self.depth_flow_paths[idx][v][i])
-                    depth_data = load_and_preprocess_flow(depth_seq, None, None, images.shape[2], images.shape[3])
+                    # Check if all views have depth paths
+                    if all(len(self.depth_flow_paths[idx][v]) > 0 for v in range(3)):
+                        depth_seq = []
+                        for i in indices:
+                            for v in range(3):
+                                depth_seq.append(self.depth_flow_paths[idx][v][i])
+                        depth_data = load_and_preprocess_flow(depth_seq, None, None, images.shape[2], images.shape[3])
+                    else:
+                        depth_data = torch.zeros(len(indices) * 3, images.shape[2], images.shape[3])
+                    input_dict["gt_depth"] = depth_data
+            else:
+                # No depth data available, create zero tensor with same shape as images
+                if self.views == 1:
+                    depth_data = torch.zeros(len(indices), images.shape[2], images.shape[3])
+                else:
+                    depth_data = torch.zeros(len(indices) * 3, images.shape[2], images.shape[3])
                 input_dict["gt_depth"] = depth_data
 
             return input_dict
@@ -457,6 +489,7 @@ class WaymoOpenDataset(Dataset):
             indices = [start_idx + i * self.interval for i in range(self.sequence_length)]
             intervals = [self.interval for _ in range(self.sequence_length - 1)]
             target_indices = [start_idx + i for i in range(self.sequence_length * self.interval - (self.interval - 1))]
+
             timestamps = np.array(indices) - start_idx
             timestamps = timestamps / timestamps[-1] * (self.sequence_length / 4)
             if self.views == 3:
@@ -530,22 +563,37 @@ class WaymoOpenDataset(Dataset):
                     target_dynamic_mask = load_and_preprocess_images(target_dy_mask_seq)  # [T*3, C, H, W]
                 input_dict["dynamic_mask"] = target_dynamic_mask
 
-            if len(self.depth_flow_paths) > 0:
+            if len(self.depth_flow_paths) > 0 and len(self.depth_flow_paths[idx]) > 0:
                 if self.views == 1:
-                    depth_seq = [self.depth_flow_paths[idx][i] for i in indices]
-                    depth_data = load_and_preprocess_flow(depth_seq, None, None, images.shape[2], images.shape[3])
-                    target_depth_seq = [self.depth_flow_paths[idx][i] for i in target_indices]
-                    target_depth_data = load_and_preprocess_flow(target_depth_seq, None, None, images.shape[2], images.shape[3])
+                    if len(self.depth_flow_paths[idx]) > 0:
+                        depth_seq = [self.depth_flow_paths[idx][i] for i in indices]
+                        depth_data = load_and_preprocess_flow(depth_seq, None, None, images.shape[2], images.shape[3])
+                        target_depth_seq = [self.depth_flow_paths[idx][i] for i in target_indices]
+                        target_depth_data = load_and_preprocess_flow(target_depth_seq, None, None, images.shape[2], images.shape[3])
+                    else:
+                        target_depth_data = torch.zeros(len(target_indices), images.shape[2], images.shape[3])
+                    input_dict["gt_depth"] = target_depth_data
                 elif self.views == 3:
-                    depth_seq = []
-                    target_depth_seq = []
-                    for i in indices:
-                        for v in range(3):
-                            depth_seq.append(self.depth_flow_paths[idx][v][i])
-                    for i in target_indices:
-                        for v in range(3):
-                            target_depth_seq.append(self.depth_flow_paths[idx][v][i])
-                    depth_data = load_and_preprocess_flow(depth_seq, None, None, images.shape[2], images.shape[3])
-                    target_depth_data = load_and_preprocess_flow(target_depth_seq, None, None, images.shape[2], images.shape[3])
+                    # Check if all views have depth paths
+                    if all(len(self.depth_flow_paths[idx][v]) > 0 for v in range(3)):
+                        depth_seq = []
+                        target_depth_seq = []
+                        for i in indices:
+                            for v in range(3):
+                                depth_seq.append(self.depth_flow_paths[idx][v][i])
+                        for i in target_indices:
+                            for v in range(3):
+                                target_depth_seq.append(self.depth_flow_paths[idx][v][i])
+                        depth_data = load_and_preprocess_flow(depth_seq, None, None, images.shape[2], images.shape[3])
+                        target_depth_data = load_and_preprocess_flow(target_depth_seq, None, None, images.shape[2], images.shape[3])
+                    else:
+                        target_depth_data = torch.zeros(len(target_indices) * 3, images.shape[2], images.shape[3])
+                    input_dict["gt_depth"] = target_depth_data
+            else:
+                # No depth data available, create zero tensor with same shape as images
+                if self.views == 1:
+                    target_depth_data = torch.zeros(len(target_indices), images.shape[2], images.shape[3])
+                else:
+                    target_depth_data = torch.zeros(len(target_indices) * 3, images.shape[2], images.shape[3])
                 input_dict["gt_depth"] = target_depth_data
             return input_dict
