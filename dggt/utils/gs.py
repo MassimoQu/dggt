@@ -13,7 +13,10 @@ import os
 from IPython import embed
 from torch.utils.data import Dataset, DataLoader
 import random
-import open3d as o3d
+try:
+    import open3d as o3d
+except Exception:
+    o3d = None
 from PIL import Image
 from torchvision import transforms as TF
 
@@ -120,4 +123,3 @@ def downsample_3dgs(points, rgbs, opacity, scales, rotation, num_points=200000):
         scales[indices],
         rotation[indices]
     )
-

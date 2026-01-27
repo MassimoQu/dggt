@@ -1,6 +1,9 @@
 import numpy as np
 import math
-import open3d as o3d
+try:
+    import open3d as o3d
+except Exception:
+    o3d = None
 from dggt.models.projector import Projector
 from gsplat.rendering import rasterization
 import torch

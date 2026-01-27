@@ -17,9 +17,25 @@ import matplotlib
 import matplotlib.pyplot as plt
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import lpips
-import open3d as o3d
-from third_party.difix.infer import process_images_with_difix
-from third_party.TAPIP3D.utils.inference_utils import load_model, read_video, inference, get_grid_queries, resize_depth_bilinear
+try:
+    import open3d as o3d
+except Exception:
+    o3d = None
+try:
+    from third_party.difix.infer import process_images_with_difix
+except Exception as _difix_err:
+    process_images_with_difix = None
+    _difix_import_error = _difix_err
+
+try:
+    from third_party.TAPIP3D.utils.inference_utils import load_model, read_video, inference, get_grid_queries, resize_depth_bilinear
+except Exception as _tapip_err:
+    load_model = None
+    read_video = None
+    inference = None
+    get_grid_queries = None
+    resize_depth_bilinear = None
+    _tapip_import_error = _tapip_err
 from dggt.models.vggt import VGGT
 from dggt.utils.pose_enc import pose_encoding_to_extri_intri
 from dggt.utils.geometry import unproject_depth_map_to_point_map
@@ -27,7 +43,7 @@ from dggt.utils.gs import concat_list, get_masked_gs, get_split_gs
 from dggt.utils.visual_track import visualize_tracks_on_images
 from gsplat.rendering import rasterization
 from datasets.dataset import WaymoOpenDataset
-from utils.interplation import interp_all
+from datasets.opv2v_dataset import OPV2VDataset
 from utils.video_maker import make_comparison_video_quad
 def alpha_t(t, t0, alpha, gamma0 = 1, gamma1 = 0.1):
     sigma = torch.log(torch.tensor(gamma1)).to(gamma0.device) / ((gamma0)**2 + 1e-6)
@@ -79,7 +95,8 @@ def parse_scene_names(scene_names_str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--image_dir', type=str, required=True, help='Path to the input images')
-    parser.add_argument('--scene_names', type=str, nargs='+', required=True, help='Scene names, supports formats like 3 5 7 or (3,7)')
+    parser.add_argument('--dataset_type', type=str, default='waymo', choices=['waymo', 'opv2v'], help='Dataset type')
+    parser.add_argument('--scene_names', type=str, nargs='+', default=None, help='Scene names, supports formats like 3 5 7 or (3,7)')
     parser.add_argument('--input_views', type=int, default=1, help='Number of input views')
     parser.add_argument('--sequence_length', type=int, default=4, help='Number of input frames')
     parser.add_argument('--start_idx', type=int, default=0, help='Starting frame index')
@@ -91,39 +108,60 @@ def main():
     parser.add_argument('-metrics', action='store_true', help='Whether to output evaluation metrics')
     parser.add_argument('-diffusion', action='store_true', help='Whether to process images with diffusion model')
     parser.add_argument('--intervals', type=int, default=2, help='Interval for mode=3')
+    parser.add_argument('--opv2v_camera_id', type=int, default=0, help='OPV2V camera id (0-3)')
+    parser.add_argument('--opv2v_max_scenes', type=int, default=None, help='Limit OPV2V scenes for quick runs')
     args = parser.parse_args()
     os.makedirs(args.output_path, exist_ok=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.float32
     loss_fn = lpips.LPIPS(net='alex').to(device)
 
-    scene_names_str = ' '.join(args.scene_names)
-    scene_names = parse_scene_names(scene_names_str)
-    if args.mode == 3:
-        dataset = WaymoOpenDataset(
+    if args.dataset_type == "opv2v":
+        if args.input_views not in (1, 3):
+            print(f"[Warning] input_views={args.input_views} not supported for visualization; clamping to 3.")
+            args.input_views = 3
+        dataset = OPV2VDataset(
             args.image_dir,
-            scene_names=scene_names,
             sequence_length=args.sequence_length,
             start_idx=args.start_idx,
             mode=args.mode,
             views=args.input_views,
-            intervals=args.intervals
+            intervals=args.intervals,
+            camera_id=args.opv2v_camera_id,
+            max_scenes=args.opv2v_max_scenes,
         )
     else:
-        dataset = WaymoOpenDataset(
-            args.image_dir,
-            scene_names=scene_names,
-            sequence_length=args.sequence_length,
-            start_idx=args.start_idx,
-            mode=args.mode,
-            views=args.input_views
-        )
+        if args.scene_names is None:
+            parser.error("--scene_names is required for dataset_type=waymo")
+        scene_names_str = ' '.join(args.scene_names)
+        scene_names = parse_scene_names(scene_names_str)
+        if args.mode == 3:
+            dataset = WaymoOpenDataset(
+                args.image_dir,
+                scene_names=scene_names,
+                sequence_length=args.sequence_length,
+                start_idx=args.start_idx,
+                mode=args.mode,
+                views=args.input_views,
+                intervals=args.intervals
+            )
+        else:
+            dataset = WaymoOpenDataset(
+                args.image_dir,
+                scene_names=scene_names,
+                sequence_length=args.sequence_length,
+                start_idx=args.start_idx,
+                mode=args.mode,
+                views=args.input_views
+            )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
     model = VGGT().to(device)
     checkpoint = torch.load(args.ckpt_path, map_location="cpu")
     model.load_state_dict(checkpoint, strict=True)
     if args.mode == 3:
+        if load_model is None:
+            raise ImportError(f"TAPIP3D dependencies not available: {_tapip_import_error}")
         track_ckpt = 'path_to_track_model'
         track_model = load_model(track_ckpt)
         track_model.to(device)
@@ -137,7 +175,10 @@ def main():
         for batch in dataloader:
             images = batch['images'].to(device)
             sky_mask = batch['masks'].to(device).permute(0, 1, 3, 4, 2)
-            gt_dy_map = batch['dynamic_mask'].to(device)
+            if 'dynamic_mask' in batch:
+                gt_dy_map = batch['dynamic_mask'].to(device)
+            else:
+                gt_dy_map = torch.zeros_like(batch['masks']).to(device)
             gt_depth = batch['gt_depth'].to(device)
 
             bg_mask = (sky_mask == 0).any(dim=-1)
@@ -188,6 +229,10 @@ def main():
                 if args.mode == 3:
                     depth_map = depth_map.unsqueeze(0)
                     if args.input_views == 1:
+                        try:
+                            from utils.interplation import interp_all
+                        except Exception as _interp_err:
+                            raise ImportError(f"Interpolation dependencies not available: {_interp_err}")
                         (extrinsic, intrinsic, point_map, gs_map, dy_map, 
                         gs_conf, bg_mask, images, pred_flows, flow_masks,depth_interp) = interp_all(extrinsic, intrinsic, point_map, gs_map, dy_map, 
                                                                                 gs_conf, bg_mask, images, target_images, depth_map, track_model,intervals,views)
@@ -297,7 +342,9 @@ def main():
             scene_name = str(scene_idx).zfill(3)
             inference_time = time.time() - start_time
             inference_time_list.append(inference_time)
-            if args.difix:
+            if args.diffusion:
+                if process_images_with_difix is None:
+                    raise ImportError(f"DIFIX dependencies not available: {_difix_import_error}")
                 processed_frames = []
                 for i in range(rendered_image.shape[0]):
                     frame = rendered_image[i].detach().cpu().clamp(0, 1)

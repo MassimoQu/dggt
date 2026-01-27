@@ -6,7 +6,10 @@ import os
 from IPython import embed
 from torch.utils.data import Dataset, DataLoader
 import random
-import open3d as o3d
+try:
+    import open3d as o3d
+except Exception:
+    o3d = None
 from PIL import Image
 from torchvision import transforms as TF
 import numpy as np
@@ -347,16 +350,22 @@ class WaymoOpenDataset(Dataset):
                         seq.append(image_paths[v][i])
                 images = load_and_preprocess_images(seq)  # [S*3, C, H, W]
 
-            #sky masks
+            # sky masks (fallback to zeros if missing)
             if self.views == 1:
-                mask_seq = [sky_mask_paths[i] for i in indices]
-                masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
+                if len(sky_mask_paths) == 0:
+                    masks = torch.zeros_like(images)
+                else:
+                    mask_seq = [sky_mask_paths[i] for i in indices]
+                    masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
             elif self.views == 3:
-                mask_seq = []
-                for i in indices:
-                    for v in range(3):
-                        mask_seq.append(sky_mask_paths[v][i])
-                masks = load_and_preprocess_images(mask_seq)  # [S*3, C, H, W]
+                if len(sky_mask_paths) == 0 or any(len(v) == 0 for v in sky_mask_paths):
+                    masks = torch.zeros_like(images)
+                else:
+                    mask_seq = []
+                    for i in indices:
+                        for v in range(3):
+                            mask_seq.append(sky_mask_paths[v][i])
+                    masks = load_and_preprocess_images(mask_seq)  # [S*3, C, H, W]
 
             timestamps = np.array(indices) - start_idx
             timestamps = timestamps / timestamps[-1] * (self.sequence_length / 4)
@@ -423,16 +432,22 @@ class WaymoOpenDataset(Dataset):
                         seq.append(image_paths[v][i])
                 images = load_and_preprocess_images(seq)  # [S*3, C, H, W]
 
-            #sky masks
+            # sky masks (fallback to zeros if missing)
             if self.views == 1:
-                mask_seq = [sky_mask_paths[i] for i in indices]
-                masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
+                if len(sky_mask_paths) == 0:
+                    masks = torch.zeros_like(images)
+                else:
+                    mask_seq = [sky_mask_paths[i] for i in indices]
+                    masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
             elif self.views == 3:
-                mask_seq = []
-                for i in indices:
-                    for v in range(3):
-                        mask_seq.append(sky_mask_paths[v][i])
-                masks = load_and_preprocess_images(mask_seq)  # [S*3, C, H, W]
+                if len(sky_mask_paths) == 0 or any(len(v) == 0 for v in sky_mask_paths):
+                    masks = torch.zeros_like(images)
+                else:
+                    mask_seq = []
+                    for i in indices:
+                        for v in range(3):
+                            mask_seq.append(sky_mask_paths[v][i])
+                    masks = load_and_preprocess_images(mask_seq)  # [S*3, C, H, W]
                 
 
 
@@ -514,24 +529,32 @@ class WaymoOpenDataset(Dataset):
                         target_seq.append(image_paths[v][i])
                 target_images = load_and_preprocess_images(target_seq)  # [T*3, C, H, W]
 
-            # sky masks
+            # sky masks (fallback to zeros if missing)
             if self.views == 1:
-                mask_seq = [sky_mask_paths[i] for i in indices]
-                masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
-                target_mask_seq = [sky_mask_paths[i] for i in target_indices]
-                target_masks = load_and_preprocess_images(target_mask_seq)  # [T, C, H, W]
+                if len(sky_mask_paths) == 0:
+                    masks = torch.zeros_like(images)
+                    target_masks = torch.zeros_like(target_images)
+                else:
+                    mask_seq = [sky_mask_paths[i] for i in indices]
+                    masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
+                    target_mask_seq = [sky_mask_paths[i] for i in target_indices]
+                    target_masks = load_and_preprocess_images(target_mask_seq)  # [T, C, H, W]
             elif self.views == 3:
-                mask_seq = []
-                for i in indices:
-                    for v in range(3):
-                        mask_seq.append(sky_mask_paths[v][i])
-                masks = load_and_preprocess_images(mask_seq)  # [S*3, C, H, W]
+                if len(sky_mask_paths) == 0 or any(len(v) == 0 for v in sky_mask_paths):
+                    masks = torch.zeros_like(images)
+                    target_masks = torch.zeros_like(target_images)
+                else:
+                    mask_seq = []
+                    for i in indices:
+                        for v in range(3):
+                            mask_seq.append(sky_mask_paths[v][i])
+                    masks = load_and_preprocess_images(mask_seq)  # [S*3, C, H, W]
 
-                target_mask_seq = []
-                for i in target_indices:
-                    for v in range(3):
-                        target_mask_seq.append(sky_mask_paths[v][i])
-                target_masks = load_and_preprocess_images(target_mask_seq)  # [T*3, C, H, W]
+                    target_mask_seq = []
+                    for i in target_indices:
+                        for v in range(3):
+                            target_mask_seq.append(sky_mask_paths[v][i])
+                    target_masks = load_and_preprocess_images(target_mask_seq)  # [T*3, C, H, W]
 
             input_dict = {
                 "images": images,
