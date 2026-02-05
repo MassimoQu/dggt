@@ -1,3 +1,6 @@
+> Project: coopVGGT | Role: Baseline 4D driving reconstruction | Status: active
+> Primary docs: vggt_series_4_coop/docs/project_overview.md
+
 <div align="center">
 
 # DGGT ：FEEDFORWARD 4D RECONSTRUCTION OF DYNAMIC DRIVING SCENES USING UNPOSED IMAGES
